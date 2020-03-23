@@ -17,6 +17,7 @@
 use std::io::stdin;
 use std::cmp::Ordering;
 fn main() {
+    // Fetch the list items from the command line.
     let mut lines = Vec::new();
     let mut buf = String::new();
     stdin().read_line(&mut buf).unwrap();
@@ -27,6 +28,7 @@ fn main() {
         let buf: String = buf.trim().chars().collect();
         lines.push(buf);
     }
+    // Sort the list by asking the user a-b questions.
     lines.sort_by(|a, b| {
         println!("a: {} b: {}", a, b);
         loop {
@@ -39,6 +41,7 @@ fn main() {
             };
         }
     });
+    // Print out the ordered list.
     println!("The final order is:\n");
     for line in lines {
         println!("{}", line);
