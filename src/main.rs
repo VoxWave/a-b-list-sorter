@@ -11,6 +11,7 @@ fn main() {
         let buf: String = buf.trim().chars().collect();
         lines.push(buf);
     }
+    lines.reverse();
     lines.sort_by(|a, b| {
         println!("a: {} b: {}", a, b);
         loop {
