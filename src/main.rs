@@ -16,6 +16,7 @@
 
 use std::io::stdin;
 use std::cmp::Ordering;
+use std::collections::HashMap;
 fn main() {
     // Fetch the list items from the command line.
     let mut lines = Vec::new();
@@ -30,18 +31,28 @@ fn main() {
     }
     lines.reverse();
     // Sort the list by asking the user a-b questions.
-    lines.sort_by(|a, b| {
-        println!("a: {} b: {}", a, b);
-        loop {
-            let mut buf = String::with_capacity(1);
-            stdin().read_line(&mut buf).unwrap();
-            match buf.trim() {
-                "a" => return Ordering::Less,
-                "b" => return Ordering::Greater,
-                _ => println!("type a or b."),
-            };
+    let mut memoi = HashMap::new();
+    lines.sort_by(|a, b| if a == b {
+            Ordering::Equal
+        } else {
+            memoi.get(&(b.clone(), a.clone()))
+                .copied()
+                .map(Ordering::reverse)
+                .unwrap_or_else(|| *memoi.entry((a.clone(), b.clone()))
+                    .or_insert_with(|| {
+                        println!("a: {} b: {}", a, b);
+                        loop {
+                            let mut buf = String::with_capacity(1);
+                            stdin().read_line(&mut buf).unwrap();
+                            match buf.trim() {
+                                "a" => return Ordering::Less,
+                                "b" => return Ordering::Greater,
+                                _ => println!("type a or b."),
+                            };
+                        }
+                    }))
         }
-    });
+    );
     // Print out the ordered list.
     println!("The final order is:\n");
     for line in lines {
