@@ -1,4 +1,4 @@
-/*a-b list sorter
+/*  a-b list sorter
     Copyright (C) 2020  Victor "VoxWave" Bankowski
 
     This program is free software: you can redistribute it and/or modify
