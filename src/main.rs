@@ -45,8 +45,8 @@ fn main() {
                             let mut buf = String::with_capacity(1);
                             stdin().read_line(&mut buf).unwrap();
                             match buf.trim() {
-                                "a" => return Ordering::Less,
-                                "b" => return Ordering::Greater,
+                                "a" => return Ordering::Greater,
+                                "b" => return Ordering::Less,
                                 _ => println!("type a or b."),
                             };
                         }
@@ -55,7 +55,7 @@ fn main() {
     );
     // Print out the ordered list.
     println!("The final order is:\n");
-    for line in lines {
+    for line in lines.iter().rev() {
         println!("{}", line);
     }
 }
