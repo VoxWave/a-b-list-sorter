@@ -29,10 +29,9 @@ fn main() {
         let buf: String = buf.trim().chars().collect();
         lines.push(buf);
     }
-    lines.reverse();
     // Sort the list by asking the user a-b questions.
     let mut memoi = HashMap::new();
-    lines.sort_by(|a, b| if a == b {
+    bubble_sort(&mut lines, |a, b| if a == b {
             Ordering::Equal
         } else {
             memoi.get(&(b.clone(), a.clone()))
@@ -55,7 +54,27 @@ fn main() {
     );
     // Print out the ordered list.
     println!("The final order is:\n");
-    for line in lines.iter().rev() {
+    for line in lines {
         println!("{}", line);
+    }
+}
+
+fn bubble_sort<T, F>(vec: &mut Vec<T>, mut cmp: F)
+where F: FnMut(&T, &T) -> Ordering 
+{
+    for end in (0..vec.len()).rev() {
+        let mut sorted = true;
+        for i in 0..end {
+            match cmp(&vec[i], &vec[i+1]) {
+                Ordering::Less => {
+                    vec.swap(i, i+1);
+                    sorted = false;
+                },
+                _ => {},
+            }
+        }
+        if sorted {
+            break;
+        }
     }
 }
