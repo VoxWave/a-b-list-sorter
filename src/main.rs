@@ -16,7 +16,7 @@
 
 use std::io::stdin;
 use std::cmp::Ordering;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 fn main() {
     // Fetch the list items from the command line.
     let mut lines = Vec::new();
@@ -31,7 +31,7 @@ fn main() {
     }
     // Sort the list by asking the user a-b questions.
     let mut memoi = HashMap::new();
-    bubble_sort(&mut lines, |a, b| if a == b {
+    sort(&mut lines, |a, b| if a == b {
             Ordering::Equal
         } else {
             memoi.get(&(b.clone(), a.clone()))
@@ -59,22 +59,60 @@ fn main() {
     }
 }
 
-fn bubble_sort<T, F>(vec: &mut Vec<T>, mut cmp: F)
+pub fn sort<T, F>(vec: &mut [T], mut cmp: F)
 where F: FnMut(&T, &T) -> Ordering 
 {
-    for end in (0..vec.len()).rev() {
-        let mut sorted = true;
-        for i in 0..end {
-            match cmp(&vec[i], &vec[i+1]) {
-                Ordering::Less => {
-                    vec.swap(i, i+1);
-                    sorted = false;
-                },
-                _ => {},
-            }
-        }
-        if sorted {
-            break;
+    println!("uhh");
+    let runs = get_runs(vec, &mut cmp);
+    println!("{:?}", runs);
+    unify_order_of_runs(&runs, vec, &mut cmp);
+    merge(runs, vec, &mut cmp);
+}
+
+fn get_runs<T, F>(vec: &mut [T], mut cmp: &mut F) -> VecDeque<(usize, usize)>
+where F: FnMut(&T, &T) -> Ordering
+{
+    let mut runs = VecDeque::with_capacity(vec.len());
+    let mut current_run = (0,1);
+    let mut current_order = None;
+    for i in 0..vec.len() {
+        let this = &vec[i];
+        match vec.get(i+1) {
+            Some(next) => {
+                match current_order {
+                    Some(Ordering::Equal) | None => {
+                        current_order = Some(cmp(this, next));
+                        current_run.1 = i+2;
+                    },
+                    Some(order) => {
+                        match (order, cmp(this, next)) {
+                            (Ordering::Greater, Ordering::Less) | (Ordering::Less, Ordering::Greater) => {
+                                //new run begins since there was an ordering change.
+                                current_run.1 = i+1;
+                                runs.push_back(current_run);
+                                current_order = Some(cmp(this, next));
+                                current_run = (i+1, i+2);
+                            },
+                            _ => current_run.1 = i+2,
+                        }
+                    },
+                }
+            },
+            None => current_run.1 = i+1,
         }
     }
+    runs.push_back(current_run);
+    runs
+}
+
+fn unify_order_of_runs<T, F>(runs: &VecDeque<(usize, usize)>, vec: &mut [T], mut cmp: &mut F) 
+where F: FnMut(&T, &T) -> Ordering 
+{
+
+}
+
+fn merge<T, F>(runs: VecDeque<(usize, usize)>, vec: &mut [T], mut cmp: &mut F) 
+where F: FnMut(&T, &T) -> Ordering 
+{
+
 }
