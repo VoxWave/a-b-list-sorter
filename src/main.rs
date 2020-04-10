@@ -62,10 +62,12 @@ fn main() {
 pub fn sort<T, F>(vec: &mut [T], mut cmp: F)
 where F: FnMut(&T, &T) -> Ordering 
 {
-    println!("uhh");
     let runs = get_runs(vec, &mut cmp);
-    println!("{:?}", runs);
-    unify_order_of_runs(&runs, vec, &mut cmp);
+    let first_ordering = get_first_ordering(vec, &mut cmp);
+    if let Ordering::Equal = first_ordering {
+        return;
+    }
+    unify_order_of_runs(first_ordering, &runs, vec);
     merge(runs, vec, &mut cmp);
 }
 
@@ -105,14 +107,47 @@ where F: FnMut(&T, &T) -> Ordering
     runs
 }
 
-fn unify_order_of_runs<T, F>(runs: &VecDeque<(usize, usize)>, vec: &mut [T], mut cmp: &mut F) 
+fn get_first_ordering<T, F>(vec: &mut [T], mut cmp: F) -> Ordering 
 where F: FnMut(&T, &T) -> Ordering 
 {
-
+    for window in vec.windows(2) {
+        match cmp(&window[0], &window[1]) {
+            Ordering::Equal => {},
+            o => return o, 
+        }
+    }
+    Ordering::Equal
 }
 
-fn merge<T, F>(runs: VecDeque<(usize, usize)>, vec: &mut [T], mut cmp: &mut F) 
+fn unify_order_of_runs<T>(first_ordering: Ordering, runs: &VecDeque<(usize, usize)>, vec: &mut [T])
+{
+    let mut iter = runs.iter();
+    if let Ordering::Greater = first_ordering {
+        iter.next();
+    }
+    for (from, to) in iter.step_by(2) {
+        vec[*from..*to].reverse();
+    }
+}
+
+fn merge<T, F>(mut runs: VecDeque<(usize, usize)>, vec: &mut [T], mut cmp: &mut F) 
 where F: FnMut(&T, &T) -> Ordering 
 {
-
+    while let (Some(left), Some(right)) = (runs.pop_front(), runs.pop_front()) {
+        
+    }
 }
+// 2 6 10 11 | 3 5 7 9
+// ^1          ^2
+// 2 6 10 11 | 3 5 7 9
+// ^s^1        ^2
+// 2 3 10 11 | 6 5 7 9
+//   ^s        ^1^2
+// 2 3 5 11 | 6 10 7 9
+//     ^s     ^1   ^2
+// 2 3 5 6  |11 10 7 9
+//       ^s     ^1 ^2 
+// 2 3 5 6  | 7 10 11 9
+//            ^s ^1   ^2
+// 2 3 5 6  | 7  9 11 10
+//               ^s    ^1  ^2 
