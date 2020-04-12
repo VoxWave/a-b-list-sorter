@@ -65,17 +65,18 @@ fn main() {
 pub fn sort<T, F>(vec: &mut [T], mut cmp: F)
 where
     F: FnMut(&T, &T) -> Ordering,
+    T: std::fmt::Debug,
 {
+    // Sweep through the slice and locate runs of data that are in some order.
     let runs = get_runs(vec, &mut cmp);
-    let first_ordering = get_first_ordering(vec, &mut cmp);
-    if let Ordering::Equal = first_ordering {
-        return;
-    }
-    unify_order_of_runs(first_ordering, &runs, vec);
+    // Some runs are in the opposite order so reverse them.
+    unify_order_of_runs(&runs, vec, &mut cmp);
+    // Now we have runs of sorted data in the slice which we can merge together into one
+    // run of ordered data I.E. sort the slice.
     merge(runs, vec, &mut cmp);
 }
 
-fn get_runs<T, F>(vec: &mut [T], mut cmp: &mut F) -> VecDeque<(usize, usize)>
+fn get_runs<T, F>(vec: &mut [T], cmp: &mut F) -> VecDeque<(usize, usize)>
 where
     F: FnMut(&T, &T) -> Ordering,
 {
@@ -89,62 +90,119 @@ where
                 match current_order {
                     Some(Ordering::Equal) | None => {
                         current_order = Some(cmp(this, next));
-                        current_run.1 = i + 2;
+                        current_run.1 += 1;
                     }
                     Some(order) => {
                         match (order, cmp(this, next)) {
                             (Ordering::Greater, Ordering::Less)
                             | (Ordering::Less, Ordering::Greater) => {
                                 //new run begins since there was an ordering change.
-                                current_run.1 = i + 1;
                                 runs.push_back(current_run);
-                                current_order = Some(cmp(this, next));
+                                current_order = None;
                                 current_run = (i + 1, i + 2);
                             }
-                            _ => current_run.1 = i + 2,
+                            _ => current_run.1 += 1,
                         }
                     }
                 }
             }
-            None => current_run.1 = i + 1,
+            None => runs.push_back(current_run),
         }
     }
-    runs.push_back(current_run);
     runs
 }
 
-fn get_first_ordering<T, F>(vec: &mut [T], mut cmp: F) -> Ordering
-where
-    F: FnMut(&T, &T) -> Ordering,
-{
-    for window in vec.windows(2) {
-        match cmp(&window[0], &window[1]) {
-            Ordering::Equal => {}
-            o => return o,
-        }
-    }
-    Ordering::Equal
-}
-
-fn unify_order_of_runs<T>(
-    first_ordering: Ordering,
+fn unify_order_of_runs<T, F>(
     runs: &VecDeque<(usize, usize)>,
     vec: &mut [T],
-) {
-    let mut iter = runs.iter();
-    if let Ordering::Greater = first_ordering {
-        iter.next();
-    }
-    for (from, to) in iter.step_by(2) {
-        vec[*from..*to].reverse();
-    }
-}
-
-fn merge<T, F>(mut runs: VecDeque<(usize, usize)>, vec: &mut [T], mut cmp: &mut F)
+    cmp: &mut F,
+) 
 where
     F: FnMut(&T, &T) -> Ordering,
 {
-    while let (Some(left), Some(right)) = (runs.pop_front(), runs.pop_front()) {}
+    for (start, end) in runs {
+        if end - 1 == *start {
+            continue;
+        }
+        match cmp(&vec[*start], &vec[*start+1]) {
+            Ordering::Less => {
+                vec[*start..*end].reverse();
+            },
+            _ => {},
+        }
+    }
+}
+
+fn merge<T, F>(mut runs: VecDeque<(usize, usize)>, vec: &mut [T], cmp: &mut F)
+where
+    F: FnMut(&T, &T) -> Ordering,
+{   
+    while runs.len() > 1 {
+        let mut new_runs = VecDeque::with_capacity(runs.len()/2+1);
+        loop {
+            match (runs.pop_front(), runs.pop_front()) {
+                (Some(left), Some(right)) => new_runs.push_back(merge_adjacent(left, right, vec, cmp)),
+                (Some(run), None) => {
+                    new_runs.push_back(run);
+                    break;
+                },
+                (None, None) => break,
+                _ => unreachable!(),
+            }
+        }
+        runs = new_runs;
+    }
+}
+
+fn merge_adjacent<T, F>(left: (usize, usize), right: (usize, usize), vec: &mut [T], cmp: &mut F) -> (usize, usize) 
+where
+    F: FnMut(&T, &T) -> Ordering,
+{
+    assert!(left.1 == right.0);
+    let mut left_top= left.0;
+    let (mut right_top, right_bottom) = right;
+    let mut sort_destination = left_top;
+    loop{
+        match cmp(&vec[left_top], &vec[right_top]) {
+            Ordering::Greater | Ordering::Equal => {
+                vec.swap(left_top, sort_destination);
+                match (left_top + 1 == right_top, left_top == sort_destination) {
+                    (true, true) => {
+                        left_top += 1;
+                        break;
+                    },
+                    (true, false) => {
+                        sort_destination += 1;
+                        left_top = sort_destination;
+                    },
+                    _ => {
+                        left_top += 1;
+                        sort_destination += 1;
+                    },
+                }
+            },
+            Ordering::Less => {
+                vec.swap(right_top, sort_destination);
+                if left_top == sort_destination {
+                    left_top = right_top;
+                }
+                right_top += 1;
+                sort_destination += 1;
+                if right_top == right_bottom {
+                    break;
+                }
+            }
+        }
+    }
+    while left_top < right_top {
+        let mut cur = left_top;
+        while cur != sort_destination {
+            vec.swap(cur, cur-1);
+            cur -= 1;
+        }
+        left_top += 1;
+    }
+    (left.0, right.1)
 }
 // 2 6 10 11 | 3 5 7 9
 // ^1          ^2
@@ -160,3 +218,11 @@ where
 //            ^s ^1   ^2
 // 2 3 5 6  | 7  9 11 10
 //               ^s    ^1  ^2
+
+// 4 3 2 1 | 6 5
+// ^1s       ^2
+// 6 3 2 1 | 4 5
+//   ^s      ^1^2
+// 6 5 3 2 | 1 4 
+//     ^s      ^1   ^2
+
