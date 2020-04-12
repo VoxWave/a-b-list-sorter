@@ -204,6 +204,7 @@ where
     }
     (left.0, right.1)
 }
+
 // 2 6 10 11 | 3 5 7 9
 // ^1          ^2
 // 2 6 10 11 | 3 5 7 9
@@ -218,6 +219,23 @@ where
 //            ^s ^1   ^2
 // 2 3 5 6  | 7  9 11 10
 //               ^s    ^1  ^2
+#[test]
+fn sort_test_1() {
+    let mut original_list = vec![2,6,10,11,3,5,7,9];
+    let mut cloned_list = original_list.clone();
+    sort(&mut original_list, |a,b| b.cmp(a));
+    cloned_list.sort();
+    assert_eq!(original_list, cloned_list);
+}
+
+#[test]
+fn sort_test_2() {
+    let mut original_list = vec![4, 3, 2, 1, 6, 5];
+    let mut cloned_list = original_list.clone();
+    sort(&mut original_list, |a,b| a.cmp(b));
+    cloned_list.sort_by(|a,b| b.cmp(a));
+    assert_eq!(original_list, cloned_list);
+}
 
 // 4 3 2 1 | 6 5
 // ^1s       ^2
