@@ -223,3 +223,19 @@ fn sort_test_2() {
     cloned_list.sort_by(|a,b| b.cmp(a));
     assert_eq!(original_list, cloned_list);
 }
+
+#[test]
+fn sort_test_3() {
+    use rand::seq::SliceRandom;
+    let mut vec = Vec::with_capacity(100);
+    let mut rng = rand::thread_rng();
+    for i in 0..100 {
+        vec.push(i);
+    }
+    for _ in 0..10000 {
+        let mut sorted = vec.clone();
+        &mut sorted.shuffle(&mut rng);
+        sort(&mut sorted, |a, b| b.cmp(a));
+        assert_eq!(vec, sorted);
+    }
+}
