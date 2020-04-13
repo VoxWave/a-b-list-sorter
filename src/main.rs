@@ -161,46 +161,27 @@ where
     assert!(left.1 == right.0);
     let mut left_top= left.0;
     let (mut right_top, right_bottom) = right;
-    let mut sort_destination = left_top;
     loop{
         match cmp(&vec[left_top], &vec[right_top]) {
             Ordering::Greater | Ordering::Equal => {
-                vec.swap(left_top, sort_destination);
-                match (left_top + 1 == right_top, left_top == sort_destination) {
-                    (true, true) => {
-                        left_top += 1;
-                        break;
-                    },
-                    (true, false) => {
-                        sort_destination += 1;
-                        left_top = sort_destination;
-                    },
-                    _ => {
-                        left_top += 1;
-                        sort_destination += 1;
-                    },
-                }
+                left_top += 1;
+                if left_top == right_top {
+                    break;
+                };
             },
             Ordering::Less => {
-                vec.swap(right_top, sort_destination);
-                if left_top == sort_destination {
-                    left_top = right_top;
+                let mut this = right_top;
+                while this != left_top {
+                    vec.swap(this, this-1);
+                    this -= 1;
                 }
+                left_top += 1;
                 right_top += 1;
-                sort_destination += 1;
                 if right_top == right_bottom {
                     break;
                 }
-            }
-        }
-    }
-    while left_top < right_top {
-        let mut cur = left_top;
-        while cur != sort_destination {
-            vec.swap(cur, cur-1);
-            cur -= 1;
-        }
-        left_top += 1;
+            },
+        }   
     }
     (left.0, right.1)
 }
@@ -228,6 +209,12 @@ fn sort_test_1() {
     assert_eq!(original_list, cloned_list);
 }
 
+// 4 3 2 1 | 6 5
+// ^1s       ^2
+// 6 3 2 1 | 4 5
+//   ^s      ^1^2
+// 6 5 3 2 | 1 4 
+//     ^s      ^1   ^2
 #[test]
 fn sort_test_2() {
     let mut original_list = vec![4, 3, 2, 1, 6, 5];
@@ -236,11 +223,3 @@ fn sort_test_2() {
     cloned_list.sort_by(|a,b| b.cmp(a));
     assert_eq!(original_list, cloned_list);
 }
-
-// 4 3 2 1 | 6 5
-// ^1s       ^2
-// 6 3 2 1 | 4 5
-//   ^s      ^1^2
-// 6 5 3 2 | 1 4 
-//     ^s      ^1   ^2
-
