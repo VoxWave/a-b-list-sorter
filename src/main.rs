@@ -41,7 +41,7 @@ fn main() {
                 .map(Ordering::reverse)
                 .unwrap_or_else(|| {
                     *memoi.entry((a.clone(), b.clone())).or_insert_with(|| {
-                        println!("a: {} b: {}", a, b);
+                        println!("a: {}\n\n b: {}", a, b);
                         loop {
                             let mut buf = String::with_capacity(1);
                             stdin().read_line(&mut buf).unwrap();
