@@ -31,7 +31,7 @@ fn main() {
     }
     // Sort the list by asking the user a-b questions.
     let mut memoi = HashMap::new();
-    sort(&mut lines, |a, b| {
+    merge_sort(&mut lines, |a, b| {
         if a == b {
             Ordering::Equal
         } else {
@@ -74,6 +74,31 @@ where
     // Now we have runs of sorted data in the slice which we can merge together into one
     // run of ordered data I.E. sort the slice.
     merge(runs, vec, &mut cmp);
+}
+
+pub fn merge_sort<T, F>(vec: &mut [T], mut cmp: F)
+where
+    F: FnMut(&T, &T) -> Ordering,
+    T: std::fmt::Debug,
+{
+    let runs = get_merge_sort_runs(vec, &mut cmp);
+    unify_order_of_runs(&runs, vec, &mut cmp);
+    merge(runs, vec, &mut cmp);
+}
+
+fn get_merge_sort_runs<T, F>(vec: &mut [T], _: &mut F) -> VecDeque<(usize, usize)>
+where
+    F: FnMut(&T, &T) -> Ordering,
+{
+    let mut runs = VecDeque::with_capacity(vec.len());
+    for i in (0..vec.len()).step_by(2) {
+        if i+2 > vec.len() {
+            runs.push_back((i,i+1));
+        } else {
+            runs.push_back((i,i+2));
+        }
+    }
+    runs
 }
 
 fn get_runs<T, F>(vec: &mut [T], cmp: &mut F) -> VecDeque<(usize, usize)>
@@ -238,4 +263,83 @@ fn sort_test_3() {
         sort(&mut sorted, |a, b| b.cmp(a));
         assert_eq!(vec, sorted);
     }
+}
+
+#[test]
+fn merge_sort_test_1() {
+    let mut original_list = vec![2,6,10,11,3,5,7,9];
+    let mut cloned_list = original_list.clone();
+    merge_sort(&mut original_list, |a,b| b.cmp(a));
+    cloned_list.sort();
+    assert_eq!(original_list, cloned_list);
+}
+
+#[test]
+fn merge_sort_test_2() {
+    let mut original_list = vec![4, 3, 2, 1, 6, 5];
+    let mut cloned_list = original_list.clone();
+    merge_sort(&mut original_list, |a,b| a.cmp(b));
+    cloned_list.sort_by(|a,b| b.cmp(a));
+    assert_eq!(original_list, cloned_list);
+}
+
+#[test]
+fn merge_sort_test_3() {
+    use rand::seq::SliceRandom;
+    let mut vec = Vec::with_capacity(100);
+    let mut rng = rand::thread_rng();
+    for i in 0..100 {
+        vec.push(i);
+    }
+    for _ in 0..10000 {
+        let mut sorted = vec.clone();
+        &mut sorted.shuffle(&mut rng);
+        merge_sort(&mut sorted, |a, b| {
+        b.cmp(a)});
+        assert_eq!(vec, sorted);
+    }
+}
+
+#[test]
+fn runs_should_be_the_same() {
+    let mut vec = vec![1,2,1,2,1,2,1,2];
+    let merge_runs = get_merge_sort_runs(&mut vec, &mut (|_, _|{Ordering::Equal}));
+    let other_runs = get_runs(&mut vec, &mut (|a,b| a.cmp(b)));
+    println!("merge {:?}\nnonmerge {:?}", merge_runs, other_runs);
+    assert_eq!(merge_runs, other_runs);
+}
+
+#[test]
+fn merge_is_better() {
+    use rand::seq::SliceRandom;
+    let mut vec = Vec::with_capacity(500);
+    let mut rng = rand::thread_rng();
+    for i in 0..500 {
+        vec.push(i);
+    }
+    let mut sort_cmps = 0;
+    for _ in 0..10000 {
+        let mut sorted = vec.clone();
+        &mut sorted.shuffle(&mut rng);
+        sort(&mut sorted, |a, b| {
+            sort_cmps += 1;
+            b.cmp(a)
+        });
+        assert_eq!(vec, sorted);
+    }
+    println!("{}", sort_cmps);
+
+    let mut merge_sort_cmps = 0;
+    for _ in 0..10000 {
+        let mut sorted = vec.clone();
+        &mut sorted.shuffle(&mut rng);
+        merge_sort(&mut sorted, |a, b| {
+            merge_sort_cmps += 1;
+            b.cmp(a)
+        });
+        assert_eq!(vec, sorted);
+    }
+    println!("{}", merge_sort_cmps);
+
+    assert!(merge_sort_cmps < sort_cmps);
 }
