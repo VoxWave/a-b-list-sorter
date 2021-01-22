@@ -356,7 +356,7 @@ fn merge_is_better_2() {
     for _ in 0..10000 {
         let mut sorted = vec.clone();
         &mut sorted.shuffle(&mut rng);
-        let mut sorted2 = vec.clone();
+        let mut sorted2 = sorted.clone();
         let mut merge_cmps = 0; 
         merge_sort(&mut sorted, |a, b| {
             merge_cmps += 1;
@@ -367,7 +367,41 @@ fn merge_is_better_2() {
             merge_runs_cmps += 1;
             b.cmp(a)
         });
-        if merge_cmps > merge_runs_cmps {
+        println!("merge: {}, merge_runs: {}", merge_cmps, merge_runs_cmps);
+        if merge_cmps < merge_runs_cmps {
+            merge_score += 1;
+        } else {
+            merge_score -= 1;
+        }
+    }
+    assert!(merge_score == 10000);
+}
+
+#[test]
+fn merge_is_better_than_std() {
+    use rand::seq::SliceRandom;
+    let mut vec = Vec::with_capacity(100);
+    let mut rng = rand::thread_rng();
+    for i in 0..100 {
+        vec.push(i);
+    }
+    let mut merge_score = 0;
+    for _ in 0..10000 {
+        let mut sorted = vec.clone();
+        &mut sorted.shuffle(&mut rng);
+        let mut sorted2 = sorted.clone();
+        let mut merge_cmps = 0; 
+        merge_sort(&mut sorted, |a, b| {
+            merge_cmps += 1;
+            b.cmp(a)
+        });
+        let mut std_cmps = 0;
+        sorted2.sort_by(|a, b| {
+            std_cmps += 1;
+            b.cmp(a)
+        });
+        println!("merge: {}, std: {}", merge_cmps, std_cmps);
+        if merge_cmps < std_cmps {
             merge_score += 1;
         } else {
             merge_score -= 1;
