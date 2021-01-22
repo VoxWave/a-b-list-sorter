@@ -314,7 +314,7 @@ fn merge_is_better() {
     use rand::seq::SliceRandom;
     let mut vec = Vec::with_capacity(500);
     let mut rng = rand::thread_rng();
-    for i in 0..500 {
+    for i in 0..100 {
         vec.push(i);
     }
     let mut sort_cmps = 0;
@@ -342,4 +342,36 @@ fn merge_is_better() {
     println!("{}", merge_sort_cmps);
 
     assert!(merge_sort_cmps < sort_cmps);
+}
+
+#[test]
+fn merge_is_better_2() {
+    use rand::seq::SliceRandom;
+    let mut vec = Vec::with_capacity(100);
+    let mut rng = rand::thread_rng();
+    for i in 0..100 {
+        vec.push(i);
+    }
+    let mut merge_score = 0;
+    for _ in 0..10000 {
+        let mut sorted = vec.clone();
+        &mut sorted.shuffle(&mut rng);
+        let mut sorted2 = vec.clone();
+        let mut merge_cmps = 0; 
+        merge_sort(&mut sorted, |a, b| {
+            merge_cmps += 1;
+            b.cmp(a)
+        });
+        let mut merge_runs_cmps = 0;
+        sort(&mut sorted2, |a, b| {
+            merge_runs_cmps += 1;
+            b.cmp(a)
+        });
+        if merge_cmps > merge_runs_cmps {
+            merge_score += 1;
+        } else {
+            merge_score -= 1;
+        }
+    }
+    assert!(merge_score == 10000);
 }
