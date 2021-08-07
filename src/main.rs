@@ -52,11 +52,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         // Fetch the list items from the command line.
         let mut lines = Vec::new();
         let mut buf = String::new();
-        stdin().read_line(&mut buf).unwrap();
-        let n = buf.trim().parse::<usize>().unwrap();
+        stdin().read_line(&mut buf)?;
+        let n = buf.trim().parse::<usize>()?;
         for _ in 0..n {
             let mut buf = String::new();
-            stdin().read_line(&mut buf).unwrap();
+            stdin().read_line(&mut buf)?;
             let buf: String = buf.trim().chars().collect();
             lines.push(buf);
         }
@@ -66,34 +66,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut memoi = HashMap::new();
     if let Some(filename) = args.value_of("state") {
         println!("Loading sorting state from `{}`", filename);
-        let file = File::open(filename)?;
-        let reader = BufReader::new(file);
-        for (n, line) in reader
-            .lines()
-            .collect::<Result<Vec<_>, _>>()?
-            .iter()
-            .enumerate()
-        {
-            let mut split = line.split("|");
-            let a = split
-                .next()
-                .ok_or(format!("No a on line {}", n))?
-                .to_owned();
-            let ord = split.next().ok_or(format!("No ordering on line {}", n))?;
-            let b = split
-                .next()
-                .ok_or(format!("No b on line {}", n))?
-                .to_owned();
-            match ord {
-                "<" => {
-                    memoi.insert((a, b), Ordering::Less);
-                }
-                ">" => {
-                    memoi.insert((a, b), Ordering::Greater);
-                }
-                _ => panic!("Unknown ordering `{}` on line {}", ord, n),
-            }
-        }
+        load_state(filename, &mut memoi)?;
     }
 
     println!("You can save the sorting state by inputting `save <filename>`");
@@ -110,7 +83,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                         .get(&(a.clone(), b.clone()))
                         .copied()
                         .unwrap_or_else(|| {
-                            let result = ask_user(a, b, &memoi);
+                            let result = ask_user(a, b, &memoi).unwrap();
                             memoi.insert((a.clone(), b.clone()), result);
                             result
                         })
@@ -134,30 +107,78 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn ask_user(a: &str, b: &str, memoi: &HashMap<(String, String), Ordering>) -> Ordering {
+fn load_state(
+    filename: &str,
+    memoi: &mut HashMap<(String, String), Ordering>,
+) -> Result<(), Box<dyn Error>> {
+    let file = File::open(filename)?;
+    let reader = BufReader::new(file);
+    for (n, line) in reader
+        .lines()
+        .collect::<Result<Vec<_>, _>>()?
+        .iter()
+        .enumerate()
+    {
+        let mut split = line.split("|");
+        let a = split
+            .next()
+            .ok_or(format!("No a on line {}", n))?
+            .to_owned();
+        let ord = split.next().ok_or(format!("No ordering on line {}", n))?;
+        let b = split
+            .next()
+            .ok_or(format!("No b on line {}", n))?
+            .to_owned();
+        match ord {
+            "<" => {
+                memoi.insert((a, b), Ordering::Less);
+            }
+            ">" => {
+                memoi.insert((a, b), Ordering::Greater);
+            }
+            _ => Err(format!("Unknown ordering `{}` on line {}", ord, n))?,
+        }
+    }
+    Ok(())
+}
+
+fn save_state(
+    filename: &str,
+    memoi: &HashMap<(String, String), Ordering>,
+) -> Result<(), Box<dyn Error>> {
+    let mut file = File::create(filename)?;
+    for ((a, b), ord) in memoi {
+        file.write(a.as_bytes())?;
+        file.write(match ord {
+            Ordering::Less => b"|<|",
+            Ordering::Equal => Err(format!(
+                "Memoized comparisons shouldn't contain equal elements"
+            ))?,
+            Ordering::Greater => b"|>|",
+        })?;
+        file.write(b.as_bytes())?;
+        file.write(b"\n")?;
+    }
+    Ok(())
+}
+
+fn ask_user(
+    a: &str,
+    b: &str,
+    memoi: &HashMap<(String, String), Ordering>,
+) -> Result<Ordering, Box<dyn Error>> {
     println!("a: {}\n\nb: {}", a, b);
     loop {
         let mut buf = String::with_capacity(1);
-        stdin().read_line(&mut buf).unwrap();
+        stdin().read_line(&mut buf)?;
         match buf.trim() {
-            "a" => return Ordering::Greater,
-            "b" => return Ordering::Less,
+            "a" => return Ok(Ordering::Greater),
+            "b" => return Ok(Ordering::Less),
             s => {
                 const SAVE: &str = "save";
                 if s.starts_with(SAVE) {
                     let filename = s[SAVE.len()..].trim();
-                    let mut file = File::create(filename).unwrap();
-                    for ((a, b), ord) in memoi {
-                        file.write(a.as_bytes()).unwrap();
-                        file.write(match ord {
-                            Ordering::Less => b"|<|",
-                            Ordering::Equal => panic!(),
-                            Ordering::Greater => b"|>|",
-                        })
-                        .unwrap();
-                        file.write(b.as_bytes()).unwrap();
-                        file.write(b"\n").unwrap();
-                    }
+                    save_state(filename, memoi)?;
                     println!("Saved current sorting state to {}", filename);
                 }
                 println!("type a or b.")
