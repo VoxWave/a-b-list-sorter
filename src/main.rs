@@ -16,21 +16,60 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.*/
 
 use std::cmp::Ordering;
 use std::collections::{HashMap, VecDeque};
-use std::io::stdin;
-fn main() {
-    // Fetch the list items from the command line.
-    let mut lines = Vec::new();
-    let mut buf = String::new();
-    stdin().read_line(&mut buf).unwrap();
-    let n = buf.trim().parse::<usize>().unwrap();
-    for _ in 0..n {
+use std::error::Error;
+use std::fs::File;
+use std::io::{stdin, BufRead, BufReader, Write};
+
+use clap::{App, Arg};
+
+fn main() -> Result<(), Box<dyn Error>> {
+    let args = App::new("a-b-list-sorter")
+        .arg(
+            Arg::with_name("input")
+                .short("i")
+                .takes_value(true)
+                .help("Specifies file from which to be sorted data is read from."),
+        )
+        .arg(
+            Arg::with_name("output")
+                .short("o")
+                .takes_value(true)
+                .help("Specifies file to which the sorted data is written to."),
+        )
+        .arg(
+            Arg::with_name("state")
+                .short("s")
+                .takes_value(true)
+                .help("Load partial sorting state from specified file."),
+        )
+        .get_matches();
+    let mut lines = if let Some(filename) = args.value_of("input") {
+        // Read the list of items from file.
+        let file = File::open(filename)?;
+        let reader = BufReader::new(file);
+        reader.lines().collect::<Result<_, _>>()?
+    } else {
+        // Fetch the list items from the command line.
+        let mut lines = Vec::new();
         let mut buf = String::new();
-        stdin().read_line(&mut buf).unwrap();
-        let buf: String = buf.trim().chars().collect();
-        lines.push(buf);
-    }
+        stdin().read_line(&mut buf)?;
+        let n = buf.trim().parse::<usize>()?;
+        for _ in 0..n {
+            let mut buf = String::new();
+            stdin().read_line(&mut buf)?;
+            let buf: String = buf.trim().chars().collect();
+            lines.push(buf);
+        }
+        lines
+    };
     // Sort the list by asking the user a-b questions.
     let mut memoi = HashMap::new();
+    if let Some(filename) = args.value_of("state") {
+        println!("Loading sorting state from `{}`", filename);
+        load_state(filename, &mut memoi)?;
+    }
+
+    println!("You can save the sorting state by inputting `save <filename>`");
     merge_sort(&mut lines, |a, b| {
         if a == b {
             Ordering::Equal
@@ -40,25 +79,111 @@ fn main() {
                 .copied()
                 .map(Ordering::reverse)
                 .unwrap_or_else(|| {
-                    *memoi.entry((a.clone(), b.clone())).or_insert_with(|| {
-                        println!("a: {}\n\n b: {}", a, b);
-                        loop {
-                            let mut buf = String::with_capacity(1);
-                            stdin().read_line(&mut buf).unwrap();
-                            match buf.trim() {
-                                "a" => return Ordering::Greater,
-                                "b" => return Ordering::Less,
-                                _ => println!("type a or b."),
-                            };
-                        }
-                    })
+                    memoi
+                        .get(&(a.clone(), b.clone()))
+                        .copied()
+                        .unwrap_or_else(|| {
+                            let result = ask_user(a, b, &memoi).unwrap();
+                            memoi.insert((a.clone(), b.clone()), result);
+                            result
+                        })
                 })
         }
     });
-    // Print out the ordered list.
-    println!("The final order is:\n");
-    for line in lines {
-        println!("{}", line);
+    if let Some(filename) = args.value_of("output") {
+        let mut file = File::create(filename)?;
+        for line in lines {
+            file.write(line.as_bytes())?;
+            file.write(b"\n")?;
+        }
+        println!("Saved sorted list to {}", filename);
+    } else {
+        // Print out the ordered list.
+        println!("The final order is:\n");
+        for line in lines {
+            println!("{}", line);
+        }
+    }
+    Ok(())
+}
+
+fn load_state(
+    filename: &str,
+    memoi: &mut HashMap<(String, String), Ordering>,
+) -> Result<(), Box<dyn Error>> {
+    let file = File::open(filename)?;
+    let reader = BufReader::new(file);
+    for (n, line) in reader
+        .lines()
+        .collect::<Result<Vec<_>, _>>()?
+        .iter()
+        .enumerate()
+    {
+        let mut split = line.split("|");
+        let a = split
+            .next()
+            .ok_or(format!("No a on line {}", n))?
+            .to_owned();
+        let ord = split.next().ok_or(format!("No ordering on line {}", n))?;
+        let b = split
+            .next()
+            .ok_or(format!("No b on line {}", n))?
+            .to_owned();
+        match ord {
+            "<" => {
+                memoi.insert((a, b), Ordering::Less);
+            }
+            ">" => {
+                memoi.insert((a, b), Ordering::Greater);
+            }
+            _ => Err(format!("Unknown ordering `{}` on line {}", ord, n))?,
+        }
+    }
+    Ok(())
+}
+
+fn save_state(
+    filename: &str,
+    memoi: &HashMap<(String, String), Ordering>,
+) -> Result<(), Box<dyn Error>> {
+    let mut file = File::create(filename)?;
+    for ((a, b), ord) in memoi {
+        file.write(a.as_bytes())?;
+        file.write(match ord {
+            Ordering::Less => b"|<|",
+            Ordering::Equal => Err(format!(
+                "Memoized comparisons shouldn't contain equal elements"
+            ))?,
+            Ordering::Greater => b"|>|",
+        })?;
+        file.write(b.as_bytes())?;
+        file.write(b"\n")?;
+    }
+    Ok(())
+}
+
+fn ask_user(
+    a: &str,
+    b: &str,
+    memoi: &HashMap<(String, String), Ordering>,
+) -> Result<Ordering, Box<dyn Error>> {
+    println!("a: {}\n\nb: {}", a, b);
+    loop {
+        let mut buf = String::with_capacity(1);
+        stdin().read_line(&mut buf)?;
+        match buf.trim() {
+            "a" => return Ok(Ordering::Greater),
+            "b" => return Ok(Ordering::Less),
+            s => {
+                const SAVE: &str = "save";
+                if s.starts_with(SAVE) {
+                    let filename = s[SAVE.len()..].trim();
+                    save_state(filename, memoi)?;
+                    println!("Saved current sorting state to {}", filename);
+                }
+                println!("type a or b.")
+            }
+        };
     }
 }
 
@@ -92,10 +217,10 @@ where
 {
     let mut runs = VecDeque::with_capacity(vec.len());
     for i in (0..vec.len()).step_by(2) {
-        if i+2 > vec.len() {
-            runs.push_back((i,i+1));
+        if i + 2 > vec.len() {
+            runs.push_back((i, i + 1));
         } else {
-            runs.push_back((i,i+2));
+            runs.push_back((i, i + 2));
         }
     }
     runs
@@ -137,11 +262,7 @@ where
     runs
 }
 
-fn unify_order_of_runs<T, F>(
-    runs: &VecDeque<(usize, usize)>,
-    vec: &mut [T],
-    cmp: &mut F,
-) 
+fn unify_order_of_runs<T, F>(runs: &VecDeque<(usize, usize)>, vec: &mut [T], cmp: &mut F)
 where
     F: FnMut(&T, &T) -> Ordering,
 {
@@ -149,11 +270,11 @@ where
         if end - 1 == *start {
             continue;
         }
-        match cmp(&vec[*start], &vec[*start+1]) {
+        match cmp(&vec[*start], &vec[*start + 1]) {
             Ordering::Less => {
                 vec[*start..*end].reverse();
-            },
-            _ => {},
+            }
+            _ => {}
         }
     }
 }
@@ -161,16 +282,18 @@ where
 fn merge<T, F>(mut runs: VecDeque<(usize, usize)>, vec: &mut [T], cmp: &mut F)
 where
     F: FnMut(&T, &T) -> Ordering,
-{   
+{
     while runs.len() > 1 {
-        let mut new_runs = VecDeque::with_capacity(runs.len()/2+1);
+        let mut new_runs = VecDeque::with_capacity(runs.len() / 2 + 1);
         loop {
             match (runs.pop_front(), runs.pop_front()) {
-                (Some(left), Some(right)) => new_runs.push_back(merge_adjacent(left, right, vec, cmp)),
+                (Some(left), Some(right)) => {
+                    new_runs.push_back(merge_adjacent(left, right, vec, cmp))
+                }
                 (Some(run), None) => {
                     new_runs.push_back(run);
                     break;
-                },
+                }
                 (None, None) => break,
                 _ => unreachable!(),
             }
@@ -179,25 +302,30 @@ where
     }
 }
 
-fn merge_adjacent<T, F>(left: (usize, usize), right: (usize, usize), vec: &mut [T], cmp: &mut F) -> (usize, usize) 
+fn merge_adjacent<T, F>(
+    left: (usize, usize),
+    right: (usize, usize),
+    vec: &mut [T],
+    cmp: &mut F,
+) -> (usize, usize)
 where
     F: FnMut(&T, &T) -> Ordering,
 {
     assert!(left.1 == right.0);
-    let mut left_top= left.0;
+    let mut left_top = left.0;
     let (mut right_top, right_bottom) = right;
-    loop{
+    loop {
         match cmp(&vec[left_top], &vec[right_top]) {
             Ordering::Greater | Ordering::Equal => {
                 left_top += 1;
                 if left_top == right_top {
                     break;
                 };
-            },
+            }
             Ordering::Less => {
                 let mut this = right_top;
                 while this != left_top {
-                    vec.swap(this, this-1);
+                    vec.swap(this, this - 1);
                     this -= 1;
                 }
                 left_top += 1;
@@ -205,8 +333,8 @@ where
                 if right_top == right_bottom {
                     break;
                 }
-            },
-        }   
+            }
+        }
     }
     (left.0, right.1)
 }
@@ -227,9 +355,9 @@ where
 //               ^s    ^1  ^2
 #[test]
 fn sort_test_1() {
-    let mut original_list = vec![2,6,10,11,3,5,7,9];
+    let mut original_list = vec![2, 6, 10, 11, 3, 5, 7, 9];
     let mut cloned_list = original_list.clone();
-    sort(&mut original_list, |a,b| b.cmp(a));
+    sort(&mut original_list, |a, b| b.cmp(a));
     cloned_list.sort();
     assert_eq!(original_list, cloned_list);
 }
@@ -238,14 +366,14 @@ fn sort_test_1() {
 // ^1s       ^2
 // 6 3 2 1 | 4 5
 //   ^s      ^1^2
-// 6 5 3 2 | 1 4 
+// 6 5 3 2 | 1 4
 //     ^s      ^1   ^2
 #[test]
 fn sort_test_2() {
     let mut original_list = vec![4, 3, 2, 1, 6, 5];
     let mut cloned_list = original_list.clone();
-    sort(&mut original_list, |a,b| a.cmp(b));
-    cloned_list.sort_by(|a,b| b.cmp(a));
+    sort(&mut original_list, |a, b| a.cmp(b));
+    cloned_list.sort_by(|a, b| b.cmp(a));
     assert_eq!(original_list, cloned_list);
 }
 
@@ -267,9 +395,9 @@ fn sort_test_3() {
 
 #[test]
 fn merge_sort_test_1() {
-    let mut original_list = vec![2,6,10,11,3,5,7,9];
+    let mut original_list = vec![2, 6, 10, 11, 3, 5, 7, 9];
     let mut cloned_list = original_list.clone();
-    merge_sort(&mut original_list, |a,b| b.cmp(a));
+    merge_sort(&mut original_list, |a, b| b.cmp(a));
     cloned_list.sort();
     assert_eq!(original_list, cloned_list);
 }
@@ -278,8 +406,8 @@ fn merge_sort_test_1() {
 fn merge_sort_test_2() {
     let mut original_list = vec![4, 3, 2, 1, 6, 5];
     let mut cloned_list = original_list.clone();
-    merge_sort(&mut original_list, |a,b| a.cmp(b));
-    cloned_list.sort_by(|a,b| b.cmp(a));
+    merge_sort(&mut original_list, |a, b| a.cmp(b));
+    cloned_list.sort_by(|a, b| b.cmp(a));
     assert_eq!(original_list, cloned_list);
 }
 
@@ -294,17 +422,16 @@ fn merge_sort_test_3() {
     for _ in 0..10000 {
         let mut sorted = vec.clone();
         &mut sorted.shuffle(&mut rng);
-        merge_sort(&mut sorted, |a, b| {
-        b.cmp(a)});
+        merge_sort(&mut sorted, |a, b| b.cmp(a));
         assert_eq!(vec, sorted);
     }
 }
 
 #[test]
 fn runs_should_be_the_same() {
-    let mut vec = vec![1,2,1,2,1,2,1,2];
-    let merge_runs = get_merge_sort_runs(&mut vec, &mut (|_, _|{Ordering::Equal}));
-    let other_runs = get_runs(&mut vec, &mut (|a,b| a.cmp(b)));
+    let mut vec = vec![1, 2, 1, 2, 1, 2, 1, 2];
+    let merge_runs = get_merge_sort_runs(&mut vec, &mut (|_, _| Ordering::Equal));
+    let other_runs = get_runs(&mut vec, &mut (|a, b| a.cmp(b)));
     println!("merge {:?}\nnonmerge {:?}", merge_runs, other_runs);
     assert_eq!(merge_runs, other_runs);
 }
@@ -357,7 +484,7 @@ fn merge_is_better_2() {
         let mut sorted = vec.clone();
         &mut sorted.shuffle(&mut rng);
         let mut sorted2 = sorted.clone();
-        let mut merge_cmps = 0; 
+        let mut merge_cmps = 0;
         merge_sort(&mut sorted, |a, b| {
             merge_cmps += 1;
             b.cmp(a)
@@ -390,7 +517,7 @@ fn merge_is_better_than_std() {
         let mut sorted = vec.clone();
         &mut sorted.shuffle(&mut rng);
         let mut sorted2 = sorted.clone();
-        let mut merge_cmps = 0; 
+        let mut merge_cmps = 0;
         merge_sort(&mut sorted, |a, b| {
             merge_cmps += 1;
             b.cmp(a)
@@ -423,7 +550,7 @@ fn merge_is_better_than_std_unstable() {
         let mut sorted = vec.clone();
         &mut sorted.shuffle(&mut rng);
         let mut sorted2 = sorted.clone();
-        let mut merge_cmps = 0; 
+        let mut merge_cmps = 0;
         merge_sort(&mut sorted, |a, b| {
             merge_cmps += 1;
             b.cmp(a)
